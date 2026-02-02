@@ -1,5 +1,5 @@
 # Use Python 3.9 (Stable for TensorFlow)
-FROM python:3.9-slim
+FROM python:3.11-slim
 
 # Install system dependencies (FFmpeg is critical for audio)
 RUN apt-get update && apt-get install -y \
