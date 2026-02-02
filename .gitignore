@@ -28,10 +28,8 @@ __pycache__/
 .DS_Store
 
 # Large ML model files
-*.h5
-models/saved_models/
-models/*.h5
+
 
 # Ignore large model files (Optional: Keep if <100MB)
 # models/*.h5venv/
-*.h5
+

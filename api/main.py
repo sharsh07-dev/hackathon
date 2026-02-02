@@ -1,34 +1,55 @@
 from fastapi import FastAPI, File, UploadFile, HTTPException
 import tensorflow as tf
+from tensorflow.keras.models import load_model  # <--- FIXED: ADDED THIS IMPORT
 import numpy as np
 import io
 import os
 from pydub import AudioSegment
 import soundfile as sf
 import librosa
-import speech_recognition as sr  # <--- NEW: The Verbal Ear
+import speech_recognition as sr
 from src.config import *
 from src.preprocessing import extract_features
 
 app = FastAPI(title="SurakshaVaani Pro", description="Dual-Engine Distress Detection")
 
-# Load Emotion Model
+# --- GLOBAL VARIABLES ---
 model = None
-recognizer = sr.Recognizer() # Initialize Speech Recognizer
+recognizer = sr.Recognizer()
 
+# --- LOAD MODEL AT STARTUP ---
 @app.on_event("startup")
-async def load_model():
+async def load_ai_model():
     global model
+    model_path = "models/surakshavaani_final.h5" 
+    
+    # 1. Check if file exists
+    if not os.path.exists(model_path):
+        print(f"❌ CRITICAL ERROR: Model file not found at {model_path}")
+        return
+
+    # 2. Check file size (Fix for Git LFS pointer issue)
+    file_size = os.path.getsize(model_path)
+    print(f"🔍 Found model file. Size: {file_size / (1024 * 1024):.2f} MB")
+    
+    if file_size < 10000: # If less than 10KB, it's definitely corrupt/pointer
+        print("❌ ERROR: Model file is too small! It might be a Git LFS pointer.")
+        return
+
     try:
-        model_path = "models/surakshavaani_final.h5" 
-        if not os.path.exists(model_path):
-            model_path = "models/saved_models/best_model.h5"
-        model = tf.keras.models.load_model(model_path)
-        print("✅ SurakshaVaani Brain Loaded")
+        # 3. Load Model (compile=False fixes Mac-to-Linux compatibility)
+        model = load_model(model_path, compile=False)
+        print("✅ Model loaded successfully!")
     except Exception as e:
         print(f"❌ Failed to load model: {e}")
+
+# --- API ENDPOINT ---
 @app.post("/analyze-threat")
 async def analyze_threat(file: UploadFile = File(...)):
+    # 0. Safety Check: Is model loaded?
+    if model is None:
+        raise HTTPException(status_code=503, detail="AI Model is not loaded. Check server logs.")
+
     if not file.filename.endswith(('.wav', '.mp3', '.m4a', '.ogg')):
         raise HTTPException(status_code=400, detail="Audio format not supported")
 
@@ -36,7 +57,7 @@ async def analyze_threat(file: UploadFile = File(...)):
         # --- STEP 1: SAVE & CONVERT AUDIO ---
         audio_bytes = await file.read()
         
-        # 1. Save original file temporarily
+        # Save original file temporarily
         file_ext = file.filename.split('.')[-1]
         temp_original = f"temp_upload.{file_ext}"
         temp_wav = "temp_clean.wav"
@@ -44,7 +65,7 @@ async def analyze_threat(file: UploadFile = File(...)):
         with open(temp_original, "wb") as f:
             f.write(audio_bytes)
             
-        # 2. Convert ANYTHING to WAV using Pydub
+        # Convert ANYTHING to WAV using Pydub
         try:
             audio = AudioSegment.from_file(temp_original)
             # Set to mono and 16000Hz (Perfect for AI)
@@ -52,22 +73,21 @@ async def analyze_threat(file: UploadFile = File(...)):
             audio.export(temp_wav, format="wav")
         except Exception as e:
             print(f"Conversion Error: {e}")
-            # Fallback: Try treating as raw WAV if conversion fails
+            # Fallback: Try treating as raw WAV
             with open(temp_wav, "wb") as f:
                 f.write(audio_bytes)
 
-        # --- STEP 2: KEYWORD DETECTION ---
+        # --- STEP 2: KEYWORD DETECTION (The Verbal Ear) ---
         detected_text = ""
         keyword_risk = False
         
-        # (Paste the BIG list of 60+ keywords here from the previous message)
+        # THREAT DICTIONARY
         threat_keywords = [
             "help", "help me", "please help", "save me", "emergency", "urgent", "sos",
             "bachao", "bachao mujhe", "madad", "police", "call 100", "call 911",
             "stop", "don't touch me", "leave me alone", "let me go",
             "kidnapped", "abducted", "gun", "knife", "weapon", "shoot", "kill",
             "ambulance", "doctor", "hospital", "heart attack", "can't breathe"
-            # ... add the rest of the list here
         ]
         
         try:
@@ -87,7 +107,7 @@ async def analyze_threat(file: UploadFile = File(...)):
             detected_text = "[Unintelligible / Noise]"
 
         # --- STEP 3: TONE ANALYSIS (Using the Clean WAV) ---
-        # Load the CLEAN WAV file we just made
+        # Load the CLEAN WAV file
         y, sr_rate = librosa.load(temp_wav, sr=SAMPLE_RATE)
         
         # A. Volume Check
