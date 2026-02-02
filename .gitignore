@@ -1,0 +1,37 @@
+venv/
+.DS_Store
+__pycache__/
+*.pyc
+# Ignore Virtual Environment
+venv/
+env/
+
+# Ignore Audio Datasets (Too large for GitHub)
+data/
+*.wav
+*.mp3
+*.m4a
+
+# Ignore Mac/Python junk
+__pycache__/
+*.pyc
+.DS_Store
+
+# Virtual Environment
+venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Mac system files
+.DS_Store
+
+# Large ML model files
+*.h5
+models/saved_models/
+models/*.h5
+
+# Ignore large model files (Optional: Keep if <100MB)
+# models/*.h5venv/
+*.h5
